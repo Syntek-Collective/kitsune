@@ -230,6 +230,80 @@ describe('saving events', () => {
     });
   });
 
+  describe('which branch a workflow run was on', () => {
+    // A run with the branch fields GitHub sends: the run's own branch and repo, and the
+    // default branch of the repo the webhook belongs to.
+    const runOnBranch = (headBranch: string, { headRepoId = 1, defaultBranch = 'main' } = {}) => ({
+      ...workflowRun('failure'),
+      workflow_run: {
+        ...workflowRun('failure').workflow_run,
+        head_branch: headBranch,
+        head_repository: { id: headRepoId },
+      },
+      repository: { id: 1, full_name: 'fox/den', default_branch: defaultBranch },
+    });
+
+    const savedDetails = async (repoId: number) => (await savedEvents(repoId))[0].details;
+
+    it('marks a run on the default branch', async () => {
+      const repo = await setUp();
+
+      await deliverEvent(repo, 'workflow_run', runOnBranch('main'));
+
+      expect(await savedDetails(repo.repoId)).toMatchObject({ onDefaultBranch: true });
+    });
+
+    it('uses the default branch GitHub reports, whatever it is called', async () => {
+      const repo = await setUp();
+
+      await deliverEvent(repo, 'workflow_run', runOnBranch('trunk', { defaultBranch: 'trunk' }));
+
+      expect(await savedDetails(repo.repoId)).toMatchObject({ onDefaultBranch: true });
+    });
+
+    it('still saves a run on another branch, marked as not on the default branch', async () => {
+      const repo = await setUp();
+
+      await deliverEvent(repo, 'workflow_run', runOnBranch('feature/login'));
+
+      expect(await savedEvents(repo.repoId)).toMatchObject([
+        { type: 'tests_failed', details: { onDefaultBranch: false } },
+      ]);
+    });
+
+    it("does not count a fork's branch that shares the default branch's name", async () => {
+      const repo = await setUp();
+
+      await deliverEvent(repo, 'workflow_run', runOnBranch('main', { headRepoId: 2 }));
+
+      expect(await savedDetails(repo.repoId)).toMatchObject({ onDefaultBranch: false });
+    });
+
+    it('makes the pet sick for a failure on the default branch only', async () => {
+      const repo = await setUp();
+      await repo.agent
+        .post(`/api/repos/${repo.repoId}/pet`)
+        .send({ name: 'Kitsu', character: 'kitsune' });
+      const mood = async () => (await repo.agent.get(`/api/repos/${repo.repoId}/pet`)).body.mood;
+
+      await deliverEvent(repo, 'workflow_run', runOnBranch('feature/login'));
+      const afterBranchFailure = await mood();
+      await deliverEvent(repo, 'workflow_run', runOnBranch('main'));
+      const afterMainFailure = await mood();
+
+      expect(afterBranchFailure).toBe('normal');
+      expect(afterMainFailure).toBe('sick');
+    });
+
+    it('leaves the mark out when GitHub does not say which branch', async () => {
+      const repo = await setUp();
+
+      await deliverEvent(repo, 'workflow_run', workflowRun('failure'));
+
+      expect(await savedDetails(repo.repoId)).not.toHaveProperty('onDefaultBranch');
+    });
+  });
+
   it.each([
     ['a ping', 'ping', { zen: 'Keep it logically awesome.' }],
     ['an opened pull request', 'pull_request', { ...mergedPullRequest, action: 'opened' }],

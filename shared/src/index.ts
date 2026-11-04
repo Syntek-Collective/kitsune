@@ -35,7 +35,14 @@ export type Pet = {
 export type RepoEvent = {
   id: number;
   type: EventType;
-  details: { number?: number; title?: string; name?: string; url?: string };
+  details: {
+    number?: number;
+    title?: string;
+    name?: string;
+    url?: string;
+    /** Test runs only: false when the run wasn't on the repo's default branch. */
+    onDefaultBranch?: boolean;
+  };
   createdAt: string;
 };
 

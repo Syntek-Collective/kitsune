@@ -96,13 +96,16 @@ describe('mood in the API', () => {
   };
 
   // Adds an event row directly, dated some number of days before the real current time.
-  const addEvent = async (repoId: number, type: EventType, daysAgo: number) => {
+  const addEvent = async (repoId: number, type: EventType, daysAgo: number, details = {}) => {
     await pool.query(
-      `INSERT INTO events (repo_id, type, github_delivery_id, created_at)
-       VALUES ($1, $2, gen_random_uuid()::text, now() - make_interval(secs => $3))`,
-      [repoId, type, daysAgo * 24 * 60 * 60],
+      `INSERT INTO events (repo_id, type, github_delivery_id, created_at, details)
+       VALUES ($1, $2, gen_random_uuid()::text, now() - make_interval(secs => $3), $4)`,
+      [repoId, type, daysAgo * 24 * 60 * 60, JSON.stringify(details)],
     );
   };
+
+  const onDefaultBranch = { onDefaultBranch: true };
+  const onOtherBranch = { onDefaultBranch: false };
 
   const moods = async (agent: ReturnType<typeof request.agent>, repoId: number) => {
     const pet = await agent.get(`/api/repos/${repoId}/pet`);
@@ -160,6 +163,46 @@ describe('mood in the API', () => {
       'sick',
       'happy',
     ]);
+  });
+
+  describe('only test runs on the default branch count', () => {
+    it('is not made sick by a failed run on another branch', async () => {
+      const { agent, repoId } = await setUp();
+      await addEvent(repoId, 'tests_passed', 2, onDefaultBranch);
+      await addEvent(repoId, 'tests_failed', 1, onOtherBranch);
+
+      expect(await moods(agent, repoId)).toEqual({ petView: 'happy', repoCard: 'happy' });
+    });
+
+    it('is not cured by a passing run on another branch', async () => {
+      const { agent, repoId } = await setUp();
+      await addEvent(repoId, 'tests_failed', 2, onDefaultBranch);
+      await addEvent(repoId, 'tests_passed', 1, onOtherBranch);
+
+      expect(await moods(agent, repoId)).toEqual({ petView: 'sick', repoCard: 'sick' });
+    });
+
+    it('is not made happy by a passing run on another branch', async () => {
+      const { agent, repoId } = await setUp();
+      await addEvent(repoId, 'tests_passed', 1, onOtherBranch);
+
+      expect(await moods(agent, repoId)).toEqual({ petView: 'normal', repoCard: 'normal' });
+    });
+
+    it('is sick when the default branch fails', async () => {
+      const { agent, repoId } = await setUp();
+      await addEvent(repoId, 'tests_passed', 2, onOtherBranch);
+      await addEvent(repoId, 'tests_failed', 1, onDefaultBranch);
+
+      expect(await moods(agent, repoId)).toEqual({ petView: 'sick', repoCard: 'sick' });
+    });
+
+    it('still counts runs saved before the branch was recorded', async () => {
+      const { agent, repoId } = await setUp();
+      await addEvent(repoId, 'tests_failed', 1);
+
+      expect(await moods(agent, repoId)).toEqual({ petView: 'sick', repoCard: 'sick' });
+    });
   });
 
   it('returns the mood when the pet is renamed', async () => {

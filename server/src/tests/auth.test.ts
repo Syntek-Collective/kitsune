@@ -2,7 +2,9 @@ import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import app from '../app.js';
+import { AUTH_RATE_LIMIT } from '../auth/rateLimit.js';
 import pool from '../db.js';
+import { parseTrustProxy } from '../trustProxy.js';
 
 const credentials = { email: 'fox@example.com', password: 'hunter2!!' };
 
@@ -106,6 +108,98 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Email and password are required' });
+  });
+});
+
+describe('rate limiting', () => {
+  const wrongLogin = (email = credentials.email, ip?: string) => {
+    const req = request(app).post('/api/auth/login');
+    if (ip) req.set('X-Forwarded-For', ip);
+    return req.send({ email, password: 'wrong-password' });
+  };
+
+  // Makes the limit's worth of failed attempts, all of which are still let through.
+  const useUpAttempts = async (email = credentials.email) => {
+    for (let attempt = 1; attempt <= AUTH_RATE_LIMIT; attempt++) {
+      expect((await wrongLogin(email)).status).toBe(401);
+    }
+  };
+
+  it(`blocks login after ${AUTH_RATE_LIMIT} failed attempts, with a JSON 429`, async () => {
+    await signUp();
+    await useUpAttempts();
+
+    const blocked = await wrongLogin();
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({ error: 'Too many attempts. Try again in 15 minutes' });
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  it('blocks even the right password once the limit is reached', async () => {
+    await signUp();
+    await useUpAttempts();
+
+    const res = await request(app).post('/api/auth/login').send(credentials);
+
+    expect(res.status).toBe(429);
+  });
+
+  it('counts an email the same however it is capitalised', async () => {
+    await signUp();
+    await useUpAttempts();
+
+    expect((await wrongLogin('FOX@Example.com')).status).toBe(429);
+  });
+
+  it('keeps a separate count for each email', async () => {
+    await signUp();
+    await useUpAttempts();
+
+    expect((await wrongLogin('someone-else@example.com')).status).toBe(401);
+  });
+
+  it('does not count successful logins', async () => {
+    await signUp();
+
+    for (let attempt = 1; attempt <= AUTH_RATE_LIMIT + 2; attempt++) {
+      const res = await request(app).post('/api/auth/login').send(credentials);
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('ignores X-Forwarded-For when no proxy is trusted, so the IP cannot be faked', async () => {
+    await signUp();
+    await useUpAttempts();
+
+    expect((await wrongLogin(credentials.email, '203.0.113.7')).status).toBe(429);
+  });
+
+  it(`blocks signup after ${AUTH_RATE_LIMIT} attempts from one address`, async () => {
+    for (let attempt = 1; attempt <= AUTH_RATE_LIMIT; attempt++) {
+      const res = await signUp({ email: `fox${attempt}@example.com` });
+      expect(res.status).toBe(201);
+    }
+
+    const blocked = await signUp({ email: 'one-too-many@example.com' });
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({ error: 'Too many attempts. Try again in 15 minutes' });
+  });
+});
+
+describe('parseTrustProxy', () => {
+  it.each([
+    [undefined, 'production', 1],
+    [undefined, 'development', false],
+    ['', 'production', 1],
+    ['2', 'production', 2],
+    ['0', 'production', 0],
+    ['true', undefined, true],
+    ['false', 'production', false],
+    [' 10.0.0.0/8, 127.0.0.1 ', undefined, '10.0.0.0/8, 127.0.0.1'],
+  ])('reads %j (NODE_ENV %s) as %j', (value, nodeEnv, expected) => {
+    expect(parseTrustProxy(value, nodeEnv)).toBe(expected);
   });
 });
 

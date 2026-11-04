@@ -18,7 +18,10 @@ type WorkflowRunPayload = {
     name?: string;
     html_url?: string;
     pull_requests?: { number?: number }[];
+    head_branch?: string | null;
+    head_repository?: { id?: number } | null;
   };
+  repository?: { id?: number; default_branch?: string };
 };
 
 const fromPullRequest = (payload: PullRequestPayload): NewEvent | null => {
@@ -28,6 +31,24 @@ const fromPullRequest = (payload: PullRequestPayload): NewEvent | null => {
   if (payload.action !== 'closed' || pr?.merged !== true) return null;
 
   return { type: 'pr_merged', details: { number: pr.number, title: pr.title, url: pr.html_url } };
+};
+
+// Only runs on the repo's default branch (usually main) count toward the pet's mood: a
+// failing run on someone's work-in-progress branch doesn't mean the project is broken.
+// Every run is still saved, so the event log shows them all, and moodQueries.ts skips the
+// ones marked false. A run from a fork whose branch has the same name (a pull request from
+// the fork's own main) is not on our default branch. When GitHub leaves out the branch,
+// this returns undefined and the run counts, as runs saved before this check do.
+const isOnDefaultBranch = (payload: WorkflowRunPayload): boolean | undefined => {
+  const branch = payload.workflow_run?.head_branch;
+  const defaultBranch = payload.repository?.default_branch;
+  if (typeof branch !== 'string' || typeof defaultBranch !== 'string') return undefined;
+
+  const headRepoId = payload.workflow_run?.head_repository?.id;
+  const repoId = payload.repository?.id;
+  const fromFork = headRepoId !== undefined && repoId !== undefined && headRepoId !== repoId;
+
+  return branch === defaultBranch && !fromFork;
 };
 
 const fromWorkflowRun = (payload: WorkflowRunPayload): NewEvent | null => {
@@ -43,7 +64,12 @@ const fromWorkflowRun = (payload: WorkflowRunPayload): NewEvent | null => {
   return {
     type,
     // `number` is the pull request the run was for, when there is one.
-    details: { name: run.name, url: run.html_url, number: run.pull_requests?.[0]?.number },
+    details: {
+      name: run.name,
+      url: run.html_url,
+      number: run.pull_requests?.[0]?.number,
+      onDefaultBranch: isOnDefaultBranch(payload),
+    },
   };
 };
 
