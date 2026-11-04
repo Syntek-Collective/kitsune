@@ -1,4 +1,5 @@
 import { afterAll, beforeEach } from 'vitest';
+import { resetAuthRateLimits } from '../auth/rateLimit.js';
 import pool from '../db.js';
 
 // Safety net: these tests wipe every table before each test, so refuse to run
@@ -10,9 +11,10 @@ if (!databaseName.endsWith('_test')) {
   );
 }
 
-// Start every test from empty tables, so tests can't affect each other.
+// Start every test from empty tables and fresh login limits, so tests can't affect each other.
 beforeEach(async () => {
   await pool.query('TRUNCATE users, repos, pets, events RESTART IDENTITY CASCADE');
+  await resetAuthRateLimits();
 });
 
 afterAll(async () => {

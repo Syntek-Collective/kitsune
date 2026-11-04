@@ -17,10 +17,13 @@ export const getMoodsForRepos = async (
     // The rules only ever look at the newest event of each type (the latest test run is the
     // newer of the latest pass and the latest failure), so that is all we fetch: at most
     // three rows per repo, however long its history is.
+    // Test runs that weren't on the repo's default branch don't count (see webhooks/events.ts).
+    // Runs saved before the branch was recorded have no onDefaultBranch, so they still count.
     const result = await pool.query<LatestEventRow>(
       `SELECT DISTINCT ON (repo_id, type) repo_id, type, created_at
        FROM events
        WHERE repo_id = ANY($1)
+         AND NOT details @> '{"onDefaultBranch": false}'
        ORDER BY repo_id, type, created_at DESC`,
       [repoIds],
     );

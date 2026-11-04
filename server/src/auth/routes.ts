@@ -4,6 +4,7 @@ import pool from '../db.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { createToken } from './token.js';
 import { requireAuth } from './middleware.js';
+import { loginRateLimit, signupRateLimit } from './rateLimit.js';
 
 const authRouter = express.Router();
 
@@ -24,7 +25,7 @@ const MIN_PASSWORD_LENGTH = 8;
 const cleanEmail = (value: unknown): string | null =>
   typeof value === 'string' ? value.trim().toLowerCase() : null;
 
-authRouter.post('/signup', async (req: Request, res: Response) => {
+authRouter.post('/signup', signupRateLimit, async (req: Request, res: Response) => {
   const email = cleanEmail(req.body?.email);
   const password: unknown = req.body?.password;
   if (
@@ -61,7 +62,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/login', async (req: Request, res: Response) => {
+authRouter.post('/login', loginRateLimit, async (req: Request, res: Response) => {
   const email = cleanEmail(req.body?.email);
   const password: unknown = req.body?.password;
   if (!email || typeof password !== 'string' || !password) {

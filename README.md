@@ -1,8 +1,24 @@
+<p align="center">
+  <img src="extension/public/kitsune-face.png" alt="Kitsune, a pixel-art fox" width="96" />
+</p>
+
 # Kitsune Repo Pet
+
+[![CI](https://github.com/Syntek-Collective/kitsune/actions/workflows/ci.yml/badge.svg)](https://github.com/Syntek-Collective/kitsune/actions/workflows/ci.yml)
+![Node 24](https://img.shields.io/badge/node-24-339933)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
 
 A pixel-art fox that lives on your GitHub pages and reacts to what happens in your repo. Merge a pull request and it's happy. Break the tests and it gets sick, sits down, and tells you which pull request did it.
 
 **Live site:** https://kitsune-1w6r.onrender.com (the free host sleeps, so the first visit can take about 20 seconds)
+
+A [Syntek Collective](https://syntekcollective.com) project. Built by [@MaiaKBard](https://github.com/MaiaKBard) and [@Oliviamckelvey](https://github.com/Oliviamckelvey).
+
+## Quick start
+
+1. Sign up on the [live site](https://kitsune-1w6r.onrender.com/signup) and connect a GitHub repo you're an admin of.
+2. Name your fox, then follow the webhook setup page (it gives you the URL and secret to paste into GitHub).
+3. Build and load the Chrome extension (see [Build and load the extension](#build-and-load-the-extension)), log in from its icon, and open your repo on GitHub.
 
 ## What it does
 
@@ -159,7 +175,7 @@ Logging in always uses the real server. The fake is left out of production build
 
 - **Server and dashboard:** Render, one service. The build has to install the dependencies and build the dashboard (`npm run build --workspace dashboard`), so that `dashboard/dist` exists when the server starts. Deploys are started by hand in Render for now.
 - **Database:** PostgreSQL on Supabase.
-- **Environment variables on Render:** `DATABASE_URL`, `JWT_SECRET`, `PUBLIC_URL` (the site's own address), and `NODE_ENV=production`, which makes the login cookie HTTPS-only.
+- **Environment variables on Render:** `DATABASE_URL`, `JWT_SECRET`, `PUBLIC_URL` (the site's own address), and `NODE_ENV=production`, which makes the login cookie HTTPS-only. Optional: `TRUST_PROXY`, how many proxies sit in front of the server so the login rate limit sees each visitor's real IP (defaults to `1` in production).
 
 When `server/db/schema.sql` changes, the new statements have to be run on Supabase too (SQL Editor). The file turns on Row Level Security for every table. Supabase puts its own public API in front of the database, and that closes it. Our server connects as the tables' owner and is not affected.
 
@@ -170,6 +186,9 @@ If a change removes or renames something the running code uses, deploy the new c
 - [API contract](docs/API.md): every route, its input and output, and the decisions behind them
 - [User flow](docs/USER-FLOW.md): every page, how they connect, and why
 - [Contributing](CONTRIBUTING.md): branches, commits, and pull requests
+- [Security policy](SECURITY.md): how to report a vulnerability privately
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Changelog](CHANGELOG.md)
 
 ## Useful scripts (run from the root)
 
@@ -190,10 +209,8 @@ If a change removes or renames something the running code uses, deploy the new c
 
 Things we know about and chose not to build for this version:
 
-- **No rate limiting on login.** Nothing stops repeated password guesses.
 - **Logging out does not cancel the token.** It clears the cookie, but the token itself stays valid until it expires after 7 days. A real fix needs short-lived tokens or a list of cancelled ones.
 - **Every finished GitHub Actions workflow counts as a test result.** A failing deploy workflow would make the fox sick too. Fine while a repo has one workflow.
-- **A failed run on any branch makes the fox sick,** not only on the main branch.
 - **One character.** Tanuki and Nekomata are shown as "coming soon".
 - **One walking frame.** The fox trots across the page. Its legs don't alternate.
 - **The live site sleeps** on the free hosting plan, and takes about 20 seconds to wake. GitHub only waits about 10 seconds for a webhook to be answered, so an event that arrives while the site is asleep may be missed. GitHub's "Redeliver" button on the webhook's page sends it again.

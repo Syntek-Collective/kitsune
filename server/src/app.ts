@@ -12,9 +12,14 @@ import eventsRouter from './events/routes.js';
 import petRouter from './pets/routes.js';
 import reposRouter from './repos/routes.js';
 import { requestLogger } from './requestLogger.js';
+import { parseTrustProxy } from './trustProxy.js';
 import webhooksRouter from './webhooks/routes.js';
 
 const app = express();
+
+// Lets req.ip be the visitor's address rather than the hosting proxy's, so the login
+// rate limit counts each visitor separately. See trustProxy.ts.
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV));
 
 // Webhook signatures are checked against the exact bytes GitHub sent, so these routes
 // keep the body raw. This must come before express.json(), which then skips the request
