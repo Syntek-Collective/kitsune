@@ -1,0 +1,7 @@
+# Shows a security link on the "New issue" page, so vulnerabilities are reported privately
+# instead of as public issues. Blank issues stay allowed for anything the templates don't fit.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Syntek-Collective/kitsune/security/advisories/new
+    about: Please report security problems privately, not as a public issue. See SECURITY.md.

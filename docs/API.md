@@ -63,6 +63,7 @@ There are three kinds of route:
 | `401`  | Authentication failed: not logged in, or a bad token                                                                             |
 | `404`  | Not found, **or not yours** (we don't use `403`, to avoid revealing what exists). Unknown `/api/...` URLs also get a JSON `404`. |
 | `409`  | Conflict: clashes with something that already exists                                                                             |
+| `429`  | Too many requests: sign up or log in was tried too often (see routes 1 and 2)                                                    |
 | `500`  | Unexpected server error (global error handler)                                                                                   |
 
 ## Error format
@@ -140,13 +141,15 @@ Output:  201 Created
 Errors:  400  "Enter a valid email and a password of at least 8 characters"
               (email must contain "@", password must be a string of at least 8 characters)
          409  "Email already registered"
+         429  "Too many attempts. Try again in 15 minutes"
+              (more than 10 sign ups from one IP address in 15 minutes)
          500  unexpected server error
 ```
 
 ### 2. Log in: `POST /api/auth/login`
 
 - **Auth:** Public
-- **Notes:** `POST`, not `GET`, so the password never goes in the URL. `200`, not `201`, because nothing new is saved. The `401` message is the same whether the email or the password is wrong, so attackers can't find out which emails have accounts (user enumeration). The email is trimmed and lowercased the same way as at sign up. Log in doesn't check the password rules, so a wrong-looking attempt gets the same vague `401`.
+- **Notes:** `POST`, not `GET`, so the password never goes in the URL. `200`, not `201`, because nothing new is saved. The `401` message is the same whether the email or the password is wrong, so attackers can't find out which emails have accounts (user enumeration). The email is trimmed and lowercased the same way as at sign up. Log in doesn't check the password rules, so a wrong-looking attempt gets the same vague `401`. Failed attempts are rate limited per IP address and email, and the `429` response includes a `Retry-After` header.
 
 ```
 Input:   { "email": "string", "password": "string" }
@@ -155,6 +158,9 @@ Output:  200 OK
          { "token": "string", "user": { "id": number, "email": "string" } }
 Errors:  400  "Email and password are required"
          401  "Invalid email or password"
+         429  "Too many attempts. Try again in 15 minutes"
+              (more than 10 failed log ins for one email from one IP address in 15 minutes;
+               successful log ins don't count)
          500  unexpected server error
 ```
 
@@ -284,10 +290,10 @@ Errors:  401  not logged in
 
 - **Event details:** along with the type, the server saves useful info from GitHub's payload in `events.details` (JSONB). This powers the event log ("PR merged #12 add login route") and future speech bubbles.
 
-| Our type                        | `details` saved                                                         |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `pr_merged`                     | `number`, `title`, `url` of the PR                                      |
-| `tests_passed` / `tests_failed` | workflow `name`, `url` of the run, and the PR `number` if it ran on one |
+| Our type                        | `details` saved                                                                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr_merged`                     | `number`, `title`, `url` of the PR                                                                                                                                         |
+| `tests_passed` / `tests_failed` | workflow `name`, `url` of the run, the PR `number` if it ran on one, and `onDefaultBranch` (whether it ran on the repo's default branch; left out when GitHub doesn't say) |
 
 ```
 Input:   Headers set by GitHub:
@@ -364,7 +370,7 @@ Errors:  401  not logged in
 
 - One failed run is enough for `sick`, and only a passing run cures it. A merged PR on top of failing tests doesn't.
 - The 3 days is the `HAPPY_WINDOW_DAYS` constant.
-- **Accepted limits for the MVP:** a failed run on any branch counts (we don't store the branch), and with several workflows the pet follows whichever finished last.
+- **Accepted limits for the MVP:** with several workflows the pet follows whichever finished last. Only runs on the repo's default branch affect mood; runs on other branches (and from forks) are saved and shown in the event log but ignored for mood.
 
 ## Decisions log
 

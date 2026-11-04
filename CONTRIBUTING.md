@@ -15,7 +15,7 @@ How we work together on Kitsune Repo Pet.
    git pull
    ```
 
-2. **Make a branch** named after the Linear issue:
+2. **Make a branch** named after what it does (`feat/`, `fix/`, `docs/`, `chore/`):
 
    ```bash
    git checkout -b feat/signup-routes
