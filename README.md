@@ -214,3 +214,7 @@ Things we know about and chose not to build for this version:
 - **One character.** Tanuki and Nekomata are shown as "coming soon".
 - **One walking frame.** The fox trots across the page. Its legs don't alternate.
 - **The live site sleeps** on the free hosting plan, and takes about 20 seconds to wake. GitHub only waits about 10 seconds for a webhook to be answered, so an event that arrives while the site is asleep may be missed. GitHub's "Redeliver" button on the webhook's page sends it again.
+
+## License
+
+Kitsune is released under the [MIT License](LICENSE).
