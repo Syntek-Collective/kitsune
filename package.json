@@ -1,6 +1,7 @@
 {
   "name": "kitsune-repo-pet",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "workspaces": [
     "shared",
